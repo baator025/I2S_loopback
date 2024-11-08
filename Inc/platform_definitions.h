@@ -1,0 +1,7 @@
+#ifndef __PLATFORM_DEFINITIONS__
+#define __PLATFORM_DEFINITIONS__
+
+#define STM32F411xE
+#define SYS_FREQ (100000000)
+
+#endif //__PLATFORM_DEFINITIONS__
