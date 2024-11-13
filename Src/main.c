@@ -24,21 +24,27 @@
 #include "i2s.h"
 #include "clock.h"
 #include "uart.h"
+#include "dma.h"
+#include "dbg_pin.h"
 
+static uint16_t dma_global_buffer = 0;
+static volatile uint32_t register_val = 0;
+static volatile uint16_t register_val_dr = 0;
 
 int main(void)
 {
     discovery_clock_100mhz_config();
     uart2_tx_init();
+    register_val = (DMA1->LISR & DMA_LISR_DMEIF3);
     printf("uart and clock configured\r\n");
+    i2s_init(INTERRUPTS_NOT_USED);
+    dma_init(&dma_global_buffer);
 
-    i2s_init();
-
+    configure_debug_pin();
     /* Loop forever */
 	for(;;)
     {
         printf("dupsko\r\n");
-        // i2s_transmit(0xAAAA);
         for(int i = 0; i < 1000000; i++){}
     }
 }

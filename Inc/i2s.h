@@ -18,7 +18,13 @@
 #define I2S_PLLN_VAL (200U)
 #define I2S_PLLR_VAL (4U)
 
-void i2s_init();
+typedef enum
+{
+    INTERRUPTS_USED,
+    INTERRUPTS_NOT_USED
+} InterruptsUsed_t;
+
+void i2s_init(InterruptsUsed_t interrupt_switch);
 void i2s_transmit(uint16_t data);
 
 // typedef struct

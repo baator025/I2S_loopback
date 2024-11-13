@@ -5,15 +5,22 @@ static void i2s_configure_params();
 static void i2s_configure_pll();
 static void i2s_configure_clock_divider();
 static void start_i2s();
+static void i2s_configure_interrupt(InterruptsUsed_t interrupt_switch);
 
-void i2s_init()
+static volatile uint16_t data;
+static volatile uint16_t reg_status[3];
+
+static volatile uint32_t log_ctr = 0;
+
+void i2s_init(InterruptsUsed_t interrupt_switch)
 {
     i2s_configure_gpio();
     i2s_configure_pll();
     i2s_configure_clock_divider();
     i2s_configure_params();
-    start_i2s();
+    i2s_configure_interrupt(interrupt_switch);
 
+    start_i2s();
 }
 
 static void i2s_configure_gpio()
@@ -42,7 +49,7 @@ static void i2s_configure_params()
     SPI2->I2SCFGR |= SPI_I2SCFGR_I2SMOD;
 
     // clock polarity
-    SPI2->I2SCFGR |= SPI_I2SCFGR_CKPOL_Pos;  // placeholder val - check the mic config
+    SPI2->I2SCFGR &= ~SPI_I2SCFGR_CKPOL;
 
     // i2s standard - msb
     SPI2->I2SCFGR &= ~SPI_I2SCFGR_I2SSTD;
@@ -54,6 +61,18 @@ static void i2s_configure_params()
 
     SPI2->I2SCFGR &= ~SPI_I2SCFGR_DATLEN;
     SPI2->I2SCFGR |= (I2S_16_BIT_DATA_LEN << SPI_I2SCFGR_DATLEN_Pos);
+
+    // DMA on
+    SPI2->CR2 |= SPI_CR2_RXDMAEN;
+}
+
+static void i2s_configure_interrupt(InterruptsUsed_t interrupt_switch)
+{
+    if(interrupt_switch == INTERRUPTS_USED)
+    {
+        SPI2->CR2 |= SPI_CR2_RXNEIE;
+        NVIC_EnableIRQ(SPI2_IRQn);
+    }
 }
 
 static void i2s_configure_pll()
@@ -100,4 +119,8 @@ void i2s_transmit(uint16_t data)
 {
     SPI2->DR |= data;
     while(!(SPI2->SR & SPI_SR_TXE)){};
+}
+
+void SPI2_IRQHandler()
+{
 }

@@ -78,7 +78,9 @@ add_executable(${CMAKE_PROJECT_NAME})
 target_sources(${CMAKE_PROJECT_NAME} PUBLIC ${sources_SRCS}
                 "Src/i2s.c"
                 "Src/uart.c"
-                "Src/clock.c")
+                "Src/clock.c"
+                "Src/dma.c"
+                "Src/dbg_pin.c")
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE

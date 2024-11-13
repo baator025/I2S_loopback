@@ -1,5 +1,9 @@
 {
     "files.associations": {
-        "platform_definitions.h": "c"
+        "platform_definitions.h": "c",
+        "dma.h": "c",
+        "uart.h": "c",
+        "cmath": "c",
+        "i2s.h": "c"
     }
 }
