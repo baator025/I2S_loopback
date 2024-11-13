@@ -26,6 +26,7 @@
 #include "uart.h"
 #include "dma.h"
 #include "dbg_pin.h"
+#include "dma_queue.h"
 
 static uint16_t dma_global_buffer = 0;
 static volatile uint32_t register_val = 0;
@@ -38,6 +39,9 @@ int main(void)
     register_val = (DMA1->LISR & DMA_LISR_DMEIF3);
     printf("uart and clock configured\r\n");
     i2s_init(INTERRUPTS_NOT_USED);
+
+    DmaQueue_t dma_queue;
+    initialize_queue(&dma_queue);
     dma_init(&dma_global_buffer);
 
     configure_debug_pin();
