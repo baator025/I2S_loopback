@@ -6,32 +6,30 @@
 
 static void dma_clock_init();
 static void set_dma_status(DmaStatus_t status);
-static void configure_transfer_path(uint16_t *data_ptr);
+static void configure_transfer_path(uint64_t *data_ptr);
 static void configure_interrupt();
+static void configure_data_flow();
 
 
-static volatile uint32_t DMA_LISR_FEIF3_ctr = 0;
-static volatile uint32_t DMA_LISR_DMEIF3_ctr = 0;
-static volatile uint32_t DMA_LISR_TEIF3_ctr = 0;
-static volatile uint32_t DMA_LISR_HTIF3_ctr = 0;
-static volatile uint32_t DMA_LISR_TCIF3_ctr = 0;
-
-static volatile uint32_t interrupt_cnt;
+// static volatile uint32_t DMA_LISR_FEIF3_ctr = 0;
+// static volatile uint32_t DMA_LISR_DMEIF3_ctr = 0;
+// static volatile uint32_t DMA_LISR_TEIF3_ctr = 0;
+// static volatile uint32_t DMA_LISR_HTIF3_ctr = 0;
+// static volatile uint32_t DMA_LISR_TCIF3_ctr = 0;
+// static volatile uint32_t interrupt_cnt;
 /*
 * function implementation
 */
 
-void dma_init(uint16_t* data_ptr)
+static volatile BufferStatus_t *buffer_ready_flag;
+
+void dma_init(uint64_t* data_ptr, volatile BufferStatus_t* buffer_status_flag)
 {
     dma_clock_init();
 
     // 1. disable dma and check - DMA_SxCR EN bit must be 0
     set_dma_status(DMA_DISABLED);
     configure_transfer_path(data_ptr);
-
-    // 4. total number of data - DMA_SxNDTR
-    DMA1_Stream3->NDTR &= ~DMA_SxNDT;
-    DMA1_Stream3->NDTR |= (DMA_DATA_LEN << DMA_SxNDT_Pos);
 
     // 6. DMA is the flow controller
     DMA1_Stream3->CR &= ~DMA_SxCR_PFCTRL;
@@ -44,6 +42,20 @@ void dma_init(uint16_t* data_ptr)
     // fifos off - direct stream
     DMA1_Stream3->FCR &= ~DMA_SxFCR_DMDIS;
 
+    configure_data_flow();
+    configure_interrupt();
+
+    buffer_ready_flag = buffer_status_flag;
+    // 10. enable dma - EN bit in DMA_SxCR
+    set_dma_status(DMA_ENABLED);
+}
+
+static void configure_data_flow()
+{
+    // 4. total number of data - DMA_SxNDTR
+    DMA1_Stream3->NDTR &= ~DMA_SxNDT;
+    DMA1_Stream3->NDTR |= (DMA_DATA_LEN << DMA_SxNDT_Pos);
+
     // 9. Configure peripheral and memory incremented/fixed mode,
 
     //peripheral data width, do not increment
@@ -51,10 +63,10 @@ void dma_init(uint16_t* data_ptr)
     DMA1_Stream3->CR |= (DMA_PERIPH_DATA_WIDTH_16_BIT << DMA_SxCR_PSIZE_Pos);
     DMA1_Stream3->CR &= ~DMA_SxCR_PINC;
 
-    //memory data width, do not increment
+    //memory data width, increment memory pointer
     DMA1_Stream3->CR &= ~DMA_SxCR_MSIZE;
     DMA1_Stream3->CR |= (DMA_MEM_DATA_WIDTH_16_BIT << DMA_SxCR_MSIZE_Pos);
-    DMA1_Stream3->CR &= ~DMA_SxCR_MINC;
+    DMA1_Stream3->CR |= DMA_SxCR_MINC;
 
     // Circular mode on
     DMA1_Stream3->CR |= DMA_SxCR_CIRC;
@@ -67,14 +79,9 @@ void dma_init(uint16_t* data_ptr)
     DMA1_Stream3->CR |= (DMA_SINGLE_TRANSFER << DMA_SxCR_MBURST_Pos);
     DMA1_Stream3->CR &= ~DMA_SxCR_PBURST;
     DMA1_Stream3->CR |= (DMA_SINGLE_TRANSFER << DMA_SxCR_PBURST_Pos);
-
-    configure_interrupt();
-
-    // 10. enable dma - EN bit in DMA_SxCR
-    set_dma_status(DMA_ENABLED);
 }
 
-static void configure_transfer_path(uint16_t *data_ptr)
+static void configure_transfer_path(uint64_t *data_ptr)
 {
     // 2. set peripheral address - DMA_SxPAR
     DMA1_Stream3->PAR = (uint32_t) &(SPI2->DR);
@@ -132,12 +139,13 @@ static inline void toggle_debug_pin()
 void DMA1_Stream3_IRQHandler()
 {
     toggle_debug_pin();
-    if(DMA1->LISR & DMA_LISR_FEIF3){DMA_LISR_FEIF3_ctr++;}
-    if(DMA1->LISR & DMA_LISR_DMEIF3){DMA_LISR_DMEIF3_ctr++;}
-    if(DMA1->LISR & DMA_LISR_TEIF3){DMA_LISR_TEIF3_ctr++;}
-    if(DMA1->LISR & DMA_LISR_HTIF3){DMA_LISR_HTIF3_ctr++;}
-    if(DMA1->LISR & DMA_LISR_TCIF3){DMA_LISR_TCIF3_ctr++;}
-    interrupt_cnt++;
+    *buffer_ready_flag = BUFFER_READY;
+    // if(DMA1->LISR & DMA_LISR_FEIF3){DMA_LISR_FEIF3_ctr++;}
+    // if(DMA1->LISR & DMA_LISR_DMEIF3){DMA_LISR_DMEIF3_ctr++;}
+    // if(DMA1->LISR & DMA_LISR_TEIF3){DMA_LISR_TEIF3_ctr++;}
+    // if(DMA1->LISR & DMA_LISR_HTIF3){DMA_LISR_HTIF3_ctr++;}
+    // if(DMA1->LISR & DMA_LISR_TCIF3){DMA_LISR_TCIF3_ctr++;}
+    // interrupt_cnt++;
     DMA1->LIFCR |= LISR_CLR_MASK;
     while(DMA1->LISR & LISR_ANY_IRQ_FLAG){};
     toggle_debug_pin();

@@ -4,6 +4,8 @@
         "dma.h": "c",
         "uart.h": "c",
         "cmath": "c",
-        "i2s.h": "c"
+        "i2s.h": "c",
+        "pdm2pcm_glo.h": "c",
+        "clock.h": "c"
     }
 }

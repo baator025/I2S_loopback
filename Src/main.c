@@ -20,35 +20,116 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "i2s.h"
 #include "clock.h"
 #include "uart.h"
 #include "dma.h"
 #include "dbg_pin.h"
-#include "dma_queue.h"
 
-static uint16_t dma_global_buffer = 0;
-static volatile uint32_t register_val = 0;
-static volatile uint16_t register_val_dr = 0;
+#include "pdm2pcm_glo.h"
+
+#define LOG_BUFFER_LENGTH 10
+
+static uint64_t dma_global_buffer = 0;
+static uint16_t PCM_out;
+static volatile BufferStatus_t buffer_readiness_flag;
+void initialize_pdm_filter(PDM_Filter_Handler_t *pdm_handle);
+void log_signal(char* signal_name, uint8_t signal_name_len, uint16_t signal_value);
+void serialize_uint64(uint64_t input, uint8_t *output);
+void enable_crc();
+
+static uint32_t op_status;
 
 int main(void)
 {
     discovery_clock_100mhz_config();
     uart2_tx_init();
-    register_val = (DMA1->LISR & DMA_LISR_DMEIF3);
     printf("uart and clock configured\r\n");
+
     i2s_init(INTERRUPTS_NOT_USED);
-
-    DmaQueue_t dma_queue;
-    initialize_queue(&dma_queue);
-    dma_init(&dma_global_buffer);
-
+    dma_init(&dma_global_buffer, &buffer_readiness_flag);
     configure_debug_pin();
+
+    PDM_Filter_Handler_t filter_handle;
+    initialize_pdm_filter(&filter_handle);
+    uint8_t filter_data[8];
+
+    char signal_name[4] = "sig";
     /* Loop forever */
 	for(;;)
     {
-        printf("dupsko\r\n");
-        for(int i = 0; i < 1000000; i++){}
+        if(buffer_readiness_flag == BUFFER_READY)
+        {
+            buffer_readiness_flag = BUFFER_NOT_READY;
+            serialize_uint64(dma_global_buffer, filter_data);
+            op_status = PDM_Filter((uint8_t*) filter_data, (uint16_t*) &PCM_out, &filter_handle);
+            if(PCM_out > 0)
+            {
+                while(1){};
+            }
+            log_signal(signal_name, sizeof(signal_name), PCM_out);
+        }
+        // for(int i = 0; i < 1000000; i++){}
     }
+}
+
+void put_to_uart_buff(char byte)
+{
+    while(!(USART2->SR & SR_TXE)){}
+    USART2->DR = (byte);
+}
+
+void log_signal(char* signal_name, uint8_t signal_name_len, uint16_t signal_value)
+{
+    char buffer[LOG_BUFFER_LENGTH];
+    itoa(signal_value, buffer, 16);
+    for(uint8_t i = 0; i < signal_name_len - 1; i++)
+    {
+        put_to_uart_buff(signal_name[i]);
+    }
+    put_to_uart_buff(':');
+    for(uint8_t i = 0; i < LOG_BUFFER_LENGTH - 1; i++)
+    {
+        if(buffer[i] == '\0') break;
+        put_to_uart_buff(buffer[i]);
+    }
+    put_to_uart_buff('\r');
+    put_to_uart_buff('\n');
+}
+
+void initialize_pdm_filter(PDM_Filter_Handler_t *pdm_handle)
+{
+    enable_crc();
+
+    pdm_handle->bit_order = PDM_FILTER_BIT_ORDER_LSB;
+    pdm_handle->endianness = PDM_FILTER_ENDIANNESS_LE;
+    pdm_handle->high_pass_tap =  2136746230;
+    pdm_handle->in_ptr_channels = 1;
+    pdm_handle->out_ptr_channels = 1;
+    PDM_Filter_Init(pdm_handle);
+
+    PDM_Filter_Config_t pdm_config = {
+        .decimation_factor = PDM_FILTER_DEC_FACTOR_64,
+        .output_samples_number = 1,
+        .mic_gain = 10
+    };
+    PDM_Filter_setConfig(pdm_handle, &pdm_config);
+}
+
+void serialize_uint64(uint64_t input, uint8_t *output)
+{
+    uint64_t mask = 0xFF00000000000000;
+    for(uint8_t it = 0; it < sizeof(uint64_t); it++)
+    {
+        output[it] = (input & mask) >> ((7-it)*8);
+        mask = mask >> 8;
+    }
+}
+
+void enable_crc()
+{
+    RCC->AHB1ENR |= RCC_AHB1ENR_CRCEN;
+    CRC->CR |= CRC_CR_RESET;
 }

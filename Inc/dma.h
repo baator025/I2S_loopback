@@ -4,7 +4,7 @@
 #include "platform_definitions.h"
 #include "stm32f4xx.h"
 
-#define DMA_DATA_LEN (1U)
+#define DMA_DATA_LEN (4U)
 #define DMA_PERIPH_DATA_WIDTH_16_BIT (0x01U)
 #define DMA_MEM_DATA_WIDTH_16_BIT (0x01U)
 
@@ -20,7 +20,13 @@
 #define LISR_ANY_IRQ_FLAG (DMA_LISR_FEIF3 | DMA_LISR_DMEIF3 | \
                             DMA_LISR_TEIF3 | DMA_LISR_HTIF3 | DMA_LISR_TCIF3)
 
-void dma_init(uint16_t* data_ptr);
+typedef enum
+{
+    BUFFER_READY,
+    BUFFER_NOT_READY
+} BufferStatus_t;
+
+void dma_init(uint64_t* data_ptr, volatile BufferStatus_t* buffer_status_flag);
 
 typedef enum
 {

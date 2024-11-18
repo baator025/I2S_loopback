@@ -92,6 +92,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     "${PROJECT_SOURCE_DIR}/chip_headers/CMSIS/Include"
     "${PROJECT_SOURCE_DIR}/chip_headers/CMSIS/Device/ST/STM32F4xx/Include"
     "${PROJECT_SOURCE_DIR}/chip_headers/CMSIS/DSP/Include"
+    "${PROJECT_SOURCE_DIR}/Middlewares/ST/STM32_Audio/Addons/PDM/Inc"
 )
 
 # Add project symbols (macros)
@@ -107,7 +108,8 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
 )
 
 # Add linked libraries
-target_link_libraries(${CMAKE_PROJECT_NAME} ${link_LIBS})
+target_link_libraries(${CMAKE_PROJECT_NAME} ${link_LIBS}
+                        "${PROJECT_SOURCE_DIR}/Middlewares/ST/STM32_Audio/Addons/PDM/Lib/libPDMFilter_CM4_GCC_wc32.a")
 
 # Compiler options
 target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
