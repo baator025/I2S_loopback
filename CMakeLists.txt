@@ -81,7 +81,8 @@ target_sources(${CMAKE_PROJECT_NAME} PUBLIC ${sources_SRCS}
                 "Src/clock.c"
                 "Src/dma.c"
                 "Src/dbg_pin.c"
-                "Src/dma_queue.c")
+                "Src/dma_queue.c"
+                "Src/i2s_definitions.c")
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE

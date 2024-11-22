@@ -35,12 +35,15 @@
 static uint64_t dma_global_buffer = 0;
 static uint16_t PCM_out;
 static volatile BufferStatus_t buffer_readiness_flag;
+
+static uint32_t reg_status[2];
+
 void initialize_pdm_filter(PDM_Filter_Handler_t *pdm_handle);
 void log_signal(char* signal_name, uint8_t signal_name_len, uint16_t signal_value);
 void serialize_uint64(uint64_t input, uint8_t *output);
 void enable_crc();
 
-static uint32_t op_status;
+// static uint32_t op_status;
 
 int main(void)
 {
@@ -48,13 +51,27 @@ int main(void)
     uart2_tx_init();
     printf("uart and clock configured\r\n");
 
-    i2s_init(INTERRUPTS_NOT_USED);
-    dma_init(&dma_global_buffer, &buffer_readiness_flag);
+    I2sInterface_t i2s_if = {.i2s_config_id=I2S3_CONF,
+                                .receive_interrupt_flag=INTERRUPTS_NOT_USED,
+                                .clock_polarity = FALLING_EDGE,
+                                .prescaler_config = {.clock_divider_value = 50,
+                                                    .prescaler_odd_bit = NOT_ODD},
+                                .pll_config = {.pll_m_value = 4,
+                                                .pll_n_value = 200,
+                                                .pll_r_value = 4}};
+
+    i2s_init(&i2s_if);
+
+    reg_status[0] = GPIOC->MODER;
+
+    reg_status[1] = GPIOC->AFR[1];
+
+    // dma_init(&dma_global_buffer, &buffer_readiness_flag);
     configure_debug_pin();
 
-    PDM_Filter_Handler_t filter_handle;
-    initialize_pdm_filter(&filter_handle);
-    uint8_t filter_data[8];
+    // PDM_Filter_Handler_t filter_handle;
+    // initialize_pdm_filter(&filter_handle);
+    // uint8_t filter_data[8];
 
     char signal_name[4] = "sig";
     /* Loop forever */
@@ -63,8 +80,8 @@ int main(void)
         if(buffer_readiness_flag == BUFFER_READY)
         {
             buffer_readiness_flag = BUFFER_NOT_READY;
-            serialize_uint64(dma_global_buffer, filter_data);
-            op_status = PDM_Filter((uint8_t*) filter_data, (uint16_t*) &PCM_out, &filter_handle);
+            // serialize_uint64(dma_global_buffer, filter_data);
+            // op_status = PDM_Filter((uint8_t*) filter_data, (uint16_t*) &PCM_out, &filter_handle);
             if(PCM_out > 0)
             {
                 while(1){};
