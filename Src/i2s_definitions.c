@@ -5,6 +5,7 @@
 */
 #define I2S2_PIN_ALTERNATE_FUNCTION 0x05
 #define I2S3_PIN_ALTERNATE_FUNCTION 0x06
+#define I2S4_PIN_ALTERNATE_FUNCTION 0x05
 
 /*
  * config definition section
@@ -45,5 +46,22 @@ const I2sConfig i2s_configurations[NUMBER_OF_CONFIGS] =
     .i2s_configuration= {.spi_register = SPI3,
                         .i2s_rcc_register = &(RCC->APB1ENR),
                         .i2s_rcc_register_mask = RCC_APB1ENR_SPI3EN,
-                        .irq_id = SPI3_IRQn}}
+                        .irq_id = SPI3_IRQn}},
+    //I2S4
+    {.clk_pin = {.pin_bank = GPIOE,
+                .pin_mode_position = GPIO_MODER_MODE12_Pos,
+                .rcc_pin_bank_position = RCC_AHB1ENR_GPIOEEN,
+                .afr_value = I2S4_PIN_ALTERNATE_FUNCTION,
+                .afr_pin_position = GPIO_AFRH_AFSEL12_Pos,
+                .afr_register_index = 1},
+    .data_pin = {.pin_bank = GPIOE,
+                .pin_mode_position = GPIO_MODER_MODE14_Pos,
+                .rcc_pin_bank_position = RCC_AHB1ENR_GPIOCEN,
+                .afr_value = I2S4_PIN_ALTERNATE_FUNCTION,
+                .afr_pin_position = GPIO_AFRH_AFSEL14_Pos,
+                .afr_register_index = 1},
+    .i2s_configuration= {.spi_register = SPI4,
+                        .i2s_rcc_register = &(RCC->APB2ENR),
+                        .i2s_rcc_register_mask = RCC_APB2ENR_SPI4EN,
+                        .irq_id = SPI4_IRQn}}
 };

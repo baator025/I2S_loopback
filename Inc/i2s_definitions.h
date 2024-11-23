@@ -8,6 +8,7 @@ typedef enum
 {
     I2S2_CONF,
     I2S3_CONF,
+    I2S4_CONF,
     NUMBER_OF_CONFIGS
 }  I2sConfigsID_t;
 

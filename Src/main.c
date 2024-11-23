@@ -51,21 +51,31 @@ int main(void)
     uart2_tx_init();
     printf("uart and clock configured\r\n");
 
-    I2sInterface_t i2s_if = {.i2s_config_id=I2S3_CONF,
+    I2sInterface_t i2s_rx_if = {.i2s_config_id=I2S3_CONF,
                                 .receive_interrupt_flag=INTERRUPTS_NOT_USED,
                                 .clock_polarity = FALLING_EDGE,
                                 .prescaler_config = {.clock_divider_value = 50,
                                                     .prescaler_odd_bit = NOT_ODD},
                                 .pll_config = {.pll_m_value = 4,
                                                 .pll_n_value = 200,
-                                                .pll_r_value = 4}};
+                                                .pll_r_value = 4},
+                                .i2s_mode = MASTER_RECEIVER};
 
-    i2s_init(&i2s_if);
+    i2s_init(&i2s_rx_if);
 
-    reg_status[0] = GPIOC->MODER;
+    I2sInterface_t i2s_tx_if = {.i2s_config_id=I2S4_CONF,
+                                .receive_interrupt_flag=INTERRUPTS_NOT_USED,
+                                .clock_polarity = FALLING_EDGE,
+                                .prescaler_config = {.clock_divider_value = 50,
+                                                    .prescaler_odd_bit = NOT_ODD},
+                                .pll_config = {.pll_m_value = 4,
+                                                .pll_n_value = 200,
+                                                .pll_r_value = 4},
+                                .i2s_mode = SLAVE_TRANSMITTER};
 
-    reg_status[1] = GPIOC->AFR[1];
+    i2s_init(&i2s_tx_if);
 
+    i2s_transmit(0xAA, &i2s_tx_if);
     // dma_init(&dma_global_buffer, &buffer_readiness_flag);
     configure_debug_pin();
 

@@ -10,6 +10,10 @@
 #define I2S_MSB_STANDARD (0x01)
 #define I2S_16_BIT_DATA_LEN (0x00)
 
+#define I2S_MASTER_TRANSMIT (0x02)
+#define I2S_MASTER_RECEIVER (0x03)
+#define I2S_SLAVE_TRANSMITTER (0x00)
+
 /*
  * static functions section
 */
@@ -23,8 +27,6 @@ void start_i2s(const I2sInterface_t * const i2s_interface);
 static volatile uint16_t data;
 static volatile uint32_t reg_status;
 static volatile uint32_t log_ctr = 0;
-
-static uint32_t mask;
 
 /*
  * functions definition section
@@ -105,13 +107,28 @@ static void i2s_configure_parameters(const I2sInterface_t * const i2s_interface)
     spi_reg->I2SCFGR &= ~SPI_I2SCFGR_I2SSTD;
     spi_reg->I2SCFGR |= (I2S_MSB_STANDARD << SPI_I2SCFGR_I2SSTD_Pos);
 
-    // set i2s bus configuration - master receiver for now, needs to be parametrized later
-    spi_reg->I2SCFGR &= ~SPI_I2SCFGR_I2SCFG;
-    spi_reg->I2SCFGR |= (I2S_MASTER_RECEIVER << SPI_I2SCFGR_I2SCFG_Pos);
-
     // set i2s data length - 16 bit for now, needs to be parametrized later
     spi_reg->I2SCFGR &= ~SPI_I2SCFGR_DATLEN;
     spi_reg->I2SCFGR |= (I2S_16_BIT_DATA_LEN << SPI_I2SCFGR_DATLEN_Pos);
+
+    // set i2s bus configuration
+    switch (i2s_interface->i2s_mode)
+    {
+    case MASTER_RECEIVER:
+        spi_reg->I2SCFGR &= ~SPI_I2SCFGR_I2SCFG;
+        spi_reg->I2SCFGR |= (I2S_MASTER_RECEIVER << SPI_I2SCFGR_I2SCFG_Pos);
+        break;
+    case MASTER_TRANSMITTER:
+        spi_reg->I2SCFGR &= ~SPI_I2SCFGR_I2SCFG;
+        spi_reg->I2SCFGR |= (I2S_MASTER_TRANSMIT << SPI_I2SCFGR_I2SCFG_Pos);
+        break;
+    case SLAVE_TRANSMITTER:
+        spi_reg->I2SCFGR &= ~SPI_I2SCFGR_I2SCFG;
+        spi_reg->I2SCFGR |= (I2S_SLAVE_TRANSMITTER << SPI_I2SCFGR_I2SCFG_Pos);
+        break;
+    default:
+        break;
+    }
 
     // set DMA on, needs to be parametrized later
     spi_reg->CR2 |= SPI_CR2_RXDMAEN;
@@ -170,10 +187,11 @@ void start_i2s(const I2sInterface_t * const i2s_interface)
 }
 
 
-void i2s_transmit(uint16_t data)
+void i2s_transmit(uint16_t data, const I2sInterface_t* const i2s_interface)
 {
-    SPI2->DR |= data;
-    while(!(SPI2->SR & SPI_SR_TXE)){};
+    SPI_TypeDef* const spi_reg = i2s_configurations[i2s_interface->i2s_config_id].i2s_configuration.spi_register;
+    spi_reg->DR |= data;
+    while(!(spi_reg->SR & SPI_SR_TXE)){};
 }
 
 void SPI2_IRQHandler()
