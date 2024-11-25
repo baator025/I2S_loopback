@@ -4,29 +4,55 @@
 #include "platform_definitions.h"
 #include "stm32f4xx.h"
 
-#define DMA_DATA_LEN (4U)
-#define DMA_PERIPH_DATA_WIDTH_16_BIT (0x01U)
-#define DMA_MEM_DATA_WIDTH_16_BIT (0x01U)
-
-#define DMA_CHANNEL_SPI2_RX (0U)
-#define DMA_PRIORITY (3U)
-#define DMA_FIFO_THRESH_32_BIT (00)
-#define DMA_DIR_PERIPH_TO_MEM (00)
-#define DMA_SINGLE_TRANSFER (0x00U)
-
-#define LISR_CLR_MASK (DMA_LIFCR_CFEIF3 | DMA_LIFCR_CDMEIF3 | \
-                            DMA_LIFCR_CTEIF3 | DMA_LIFCR_CHTIF3 | DMA_LIFCR_CTCIF3)
-
-#define LISR_ANY_IRQ_FLAG (DMA_LISR_FEIF3 | DMA_LISR_DMEIF3 | \
-                            DMA_LISR_TEIF3 | DMA_LISR_HTIF3 | DMA_LISR_TCIF3)
-
 typedef enum
 {
     BUFFER_READY,
     BUFFER_NOT_READY
 } BufferStatus_t;
 
-void dma_init(uint64_t* data_ptr, volatile BufferStatus_t* buffer_status_flag);
+typedef enum
+{
+    PERIPHERAL_TO_MEMORY,
+} DmaDirection_t;
+
+typedef enum
+{
+    LOW,
+    MEDIUM,
+    HIGH,
+    VERY_HIGH,
+    NUMBER_OF_PRIORITIES
+} DmaPriority_t;
+
+typedef enum
+{
+    BYTE,
+    HALF_WORD,
+    WORD
+} DmaDataSize_t;
+
+typedef enum
+{
+    DMA_1,
+    DMA_2
+} DmaNumber_t;
+
+typedef struct
+{
+    DmaNumber_t dma_main_register;
+    DMA_Stream_TypeDef * const dma_stream;  //table 27 in docs
+    DmaDirection_t dma_direction;
+    IRQn_Type dma_irq;
+    uint32_t dma_channel;
+    uint32_t dma_data_length;
+    void * const memory_address;
+    DmaDataSize_t memory_data_size;
+    volatile uint32_t * const peripheral_address;
+    DmaDataSize_t peripheral_data_size;
+} Dma_t;
+
+void dma_init(void* data_ptr, volatile BufferStatus_t* buffer_status_flag, Dma_t * const dma);
+// void dma_init(uint64_t* data_ptr, volatile BufferStatus_t* buffer_status_flag);
 
 typedef enum
 {

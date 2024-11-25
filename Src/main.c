@@ -38,12 +38,13 @@ static volatile BufferStatus_t buffer_readiness_flag;
 
 static uint32_t reg_status[2];
 
-void initialize_pdm_filter(PDM_Filter_Handler_t *pdm_handle);
+// void initialize_pdm_filter(PDM_Filter_Handler_t *pdm_handle);
+void initialize_pdm_filter(PDM_Filter_Handler_t * const pdm_handle, PDM_Filter_Config_t * const pdm_config);
 void log_signal(char* signal_name, uint8_t signal_name_len, uint16_t signal_value);
 void serialize_uint64(uint64_t input, uint8_t *output);
 void enable_crc();
 
-// static uint32_t op_status;
+static uint32_t op_status;
 
 int main(void)
 {
@@ -51,7 +52,7 @@ int main(void)
     uart2_tx_init();
     printf("uart and clock configured\r\n");
 
-    I2sInterface_t i2s_rx_if = {.i2s_config_id=I2S3_CONF,
+    I2sInterface_t i2s_rx_if = {.i2s_config_id=I2S2_CONF,
                                 .receive_interrupt_flag=INTERRUPTS_NOT_USED,
                                 .clock_polarity = FALLING_EDGE,
                                 .prescaler_config = {.clock_divider_value = 50,
@@ -60,28 +61,67 @@ int main(void)
                                                 .pll_n_value = 200,
                                                 .pll_r_value = 4},
                                 .i2s_mode = MASTER_RECEIVER};
-
     i2s_init(&i2s_rx_if);
 
-    I2sInterface_t i2s_tx_if = {.i2s_config_id=I2S4_CONF,
-                                .receive_interrupt_flag=INTERRUPTS_NOT_USED,
-                                .clock_polarity = FALLING_EDGE,
-                                .prescaler_config = {.clock_divider_value = 50,
-                                                    .prescaler_odd_bit = NOT_ODD},
-                                .pll_config = {.pll_m_value = 4,
-                                                .pll_n_value = 200,
-                                                .pll_r_value = 4},
-                                .i2s_mode = SLAVE_TRANSMITTER};
+    // I2sInterface_t i2s_rx_if = {.i2s_config_id=I2S4_CONF,
+    //                             .receive_interrupt_flag=INTERRUPTS_NOT_USED,
+    //                             .clock_polarity = FALLING_EDGE,
+    //                             .prescaler_config = {.clock_divider_value = 50,
+    //                                                 .prescaler_odd_bit = NOT_ODD},
+    //                             .pll_config = {.pll_m_value = 4,
+    //                                             .pll_n_value = 200,
+    //                                             .pll_r_value = 4},
+    //                             .i2s_mode = MASTER_RECEIVER};
 
-    i2s_init(&i2s_tx_if);
+    // i2s_init(&i2s_rx_if);
 
-    i2s_transmit(0xAA, &i2s_tx_if);
-    // dma_init(&dma_global_buffer, &buffer_readiness_flag);
+    // I2sInterface_t i2s_tx_if = {.i2s_config_id=I2S3_CONF,
+    //                             .receive_interrupt_flag=INTERRUPTS_NOT_USED,
+    //                             .clock_polarity = FALLING_EDGE,
+    //                             .prescaler_config = {.clock_divider_value = 50,
+    //                                                 .prescaler_odd_bit = NOT_ODD},
+    //                             .pll_config = {.pll_m_value = 4,
+    //                                             .pll_n_value = 200,
+    //                                             .pll_r_value = 4},
+    //                             .i2s_mode = SLAVE_TRANSMITTER};
+
+    // i2s_init(&i2s_tx_if);
+
+    Dma_t i2s_2_dma = { .dma_main_register = DMA_1,
+                        .dma_stream = DMA1_Stream3,
+                        .dma_direction = PERIPHERAL_TO_MEMORY,
+                        .dma_irq = DMA1_Stream3_IRQn,
+                        .dma_channel = 0,
+                        .dma_data_length = 4,
+                        .memory_address = &dma_global_buffer,
+                        .memory_data_size = HALF_WORD,
+                        .peripheral_address = &(SPI2->DR),
+                        .peripheral_data_size = HALF_WORD};
+
+    dma_init(&dma_global_buffer, &buffer_readiness_flag, &i2s_2_dma);
     configure_debug_pin();
 
-    // PDM_Filter_Handler_t filter_handle;
-    // initialize_pdm_filter(&filter_handle);
-    // uint8_t filter_data[8];
+    // Dma_t i2s_4_dma = { .dma_main_register = DMA_2,
+    //                     .dma_stream = DMA2_Stream0,
+    //                     .dma_direction = PERIPHERAL_TO_MEMORY,
+    //                     .dma_irq = DMA2_Stream0_IRQn,
+    //                     .dma_channel = 4,
+    //                     .dma_data_length = 4,
+    //                     .memory_address = &dma_global_buffer,
+    //                     .memory_data_size = HALF_WORD,
+    //                     .peripheral_address = &(SPI4->DR),
+    //                     .peripheral_data_size = HALF_WORD};
+    // dma_init(&dma_global_buffer, &buffer_readiness_flag, &i2s_4_dma);
+
+    // i2s_transmit(0xDEAD, &i2s_tx_if);
+    // i2s_transmit(0xBEEF, &i2s_tx_if);
+    // i2s_transmit(0xDEAD, &i2s_tx_if);
+    // i2s_transmit(0xBEEF, &i2s_tx_if);
+
+    PDM_Filter_Handler_t filter_handle;
+    PDM_Filter_Config_t pdm_config;
+    initialize_pdm_filter(&filter_handle, &pdm_config);
+    uint8_t filter_data[8];
 
     char signal_name[4] = "sig";
     /* Loop forever */
@@ -90,8 +130,8 @@ int main(void)
         if(buffer_readiness_flag == BUFFER_READY)
         {
             buffer_readiness_flag = BUFFER_NOT_READY;
-            // serialize_uint64(dma_global_buffer, filter_data);
-            // op_status = PDM_Filter((uint8_t*) filter_data, (uint16_t*) &PCM_out, &filter_handle);
+            serialize_uint64(dma_global_buffer, filter_data);
+            op_status = PDM_Filter((uint8_t*) filter_data, (uint16_t*) &PCM_out, &filter_handle);
             if(PCM_out > 0)
             {
                 while(1){};
@@ -126,7 +166,7 @@ void log_signal(char* signal_name, uint8_t signal_name_len, uint16_t signal_valu
     put_to_uart_buff('\n');
 }
 
-void initialize_pdm_filter(PDM_Filter_Handler_t *pdm_handle)
+void initialize_pdm_filter(PDM_Filter_Handler_t * const pdm_handle, PDM_Filter_Config_t * const pdm_config)
 {
     enable_crc();
 
@@ -135,14 +175,14 @@ void initialize_pdm_filter(PDM_Filter_Handler_t *pdm_handle)
     pdm_handle->high_pass_tap =  2136746230;
     pdm_handle->in_ptr_channels = 1;
     pdm_handle->out_ptr_channels = 1;
-    PDM_Filter_Init(pdm_handle);
+    op_status = PDM_Filter_Init(pdm_handle);
 
-    PDM_Filter_Config_t pdm_config = {
-        .decimation_factor = PDM_FILTER_DEC_FACTOR_64,
-        .output_samples_number = 1,
-        .mic_gain = 10
-    };
-    PDM_Filter_setConfig(pdm_handle, &pdm_config);
+    pdm_config->decimation_factor = PDM_FILTER_DEC_FACTOR_64;
+    pdm_config->output_samples_number = 1;
+    pdm_config->mic_gain = 10;
+    op_status = PDM_Filter_setConfig(pdm_handle, pdm_config);
+
+    while(1){};
 }
 
 void serialize_uint64(uint64_t input, uint8_t *output)

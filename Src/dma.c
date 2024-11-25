@@ -4,131 +4,226 @@
 * static funtions prototypes
 */
 
-static void dma_clock_init();
-static void set_dma_status(DmaStatus_t status);
-static void configure_transfer_path(uint64_t *data_ptr);
-static void configure_interrupt();
-static void configure_data_flow();
+static void dma_clock_init(const DmaNumber_t dma_main_register);
+static void set_dma_status(DMA_Stream_TypeDef * const dma_stream, DmaStatus_t status);
+static void configure_transfer_path(uint64_t *data_ptr, Dma_t * const dma);
+// static void configure_interrupt();
+static void configure_interrupt(Dma_t * const dma);
+static void configure_data_flow(Dma_t * const dma);
 
+static void configure_fifo(Dma_t * const dma);
 
-// static volatile uint32_t DMA_LISR_FEIF3_ctr = 0;
-// static volatile uint32_t DMA_LISR_DMEIF3_ctr = 0;
-// static volatile uint32_t DMA_LISR_TEIF3_ctr = 0;
-// static volatile uint32_t DMA_LISR_HTIF3_ctr = 0;
-// static volatile uint32_t DMA_LISR_TCIF3_ctr = 0;
-// static volatile uint32_t interrupt_cnt;
+static volatile uint32_t DMA_LISR_FEIF3_ctr = 0;
+static volatile uint32_t DMA_LISR_DMEIF3_ctr = 0;
+static volatile uint32_t DMA_LISR_TEIF3_ctr = 0;
+static volatile uint32_t DMA_LISR_HTIF3_ctr = 0;
+static volatile uint32_t DMA_LISR_TCIF3_ctr = 0;
+static volatile uint32_t interrupt_cnt;
+
+/**
+ * local defines section
+ */
+
+#define DMA_DIR_PERIPH_TO_MEM (00)
+#define DMA_DATA_SIZE_BYTE          (00)        //8 bit
+#define DMA_DATA_SIZE_HALF_WORD     (0x01)      //16 bit
+#define DMA_DATA_SIZE_WORD          (0x02)      //32 bit
+#define DMA_PRIORITY (3U)
+#define DMA_SINGLE_TRANSFER (0x00U)
+
+#define LISR_CLR_MASK (DMA_LIFCR_CFEIF3 | DMA_LIFCR_CDMEIF3 | \
+                            DMA_LIFCR_CTEIF3 | DMA_LIFCR_CHTIF3 | DMA_LIFCR_CTCIF3)
+
+#define LISR_CLR_MASK0 (DMA_LIFCR_CFEIF0 | DMA_LIFCR_CDMEIF0 | \
+                            DMA_LIFCR_CTEIF0 | DMA_LIFCR_CHTIF0 | DMA_LIFCR_CTCIF0)
+
+#define LISR_ANY_IRQ_FLAG (DMA_LISR_FEIF3 | DMA_LISR_DMEIF3 | \
+                            DMA_LISR_TEIF3 | DMA_LISR_HTIF3 | DMA_LISR_TCIF3)
+
+#define LISR_ANY_IRQ_FLAG0 (DMA_LISR_FEIF0 | DMA_LISR_DMEIF0 | \
+                            DMA_LISR_TEIF0 | DMA_LISR_HTIF0 | DMA_LISR_TCIF0)
+
 /*
 * function implementation
 */
 
 static volatile BufferStatus_t *buffer_ready_flag;
 
-void dma_init(uint64_t* data_ptr, volatile BufferStatus_t* buffer_status_flag)
+void dma_init(void* data_ptr, volatile BufferStatus_t* buffer_status_flag, Dma_t * const dma)
 {
-    dma_clock_init();
+    dma_clock_init(dma->dma_main_register);
 
     // 1. disable dma and check - DMA_SxCR EN bit must be 0
-    set_dma_status(DMA_DISABLED);
-    configure_transfer_path(data_ptr);
-
-    // 6. DMA is the flow controller
-    DMA1_Stream3->CR &= ~DMA_SxCR_PFCTRL;
+    set_dma_status(dma->dma_stream, DMA_DISABLED);
+    configure_transfer_path(data_ptr, dma);
 
     // 7. stream priority - DMA_SxCR - PL[1:0]
-    DMA1_Stream3->CR &= ~DMA_SxCR_PL;
-    DMA1_Stream3->CR |= (DMA_PRIORITY<<DMA_SxCR_PL_Pos);
+    (dma->dma_stream)->CR &= ~DMA_SxCR_PL;
+    (dma->dma_stream)->CR |= (DMA_PRIORITY<<DMA_SxCR_PL_Pos);
 
-    // 8. FIFO usage (enable or disable, threshold in transmission and reception)
-    // fifos off - direct stream
-    DMA1_Stream3->FCR &= ~DMA_SxFCR_DMDIS;
-
-    configure_data_flow();
-    configure_interrupt();
+    configure_fifo(dma);
+    configure_data_flow(dma);
+    configure_interrupt(dma);
 
     buffer_ready_flag = buffer_status_flag;
+
     // 10. enable dma - EN bit in DMA_SxCR
-    set_dma_status(DMA_ENABLED);
+    set_dma_status(dma->dma_stream, DMA_ENABLED);
+    // set_dma_status(DMA_ENABLED);
 }
 
-static void configure_data_flow()
+static uint32_t get_data_size_reg_value(const DmaDataSize_t data_size)
+{
+    uint32_t data_size_register_value = 0;
+    switch(data_size)
+    {
+        case BYTE:
+            data_size_register_value = DMA_DATA_SIZE_BYTE;
+            break;
+        case HALF_WORD:
+            data_size_register_value = DMA_DATA_SIZE_HALF_WORD;
+            break;
+        case WORD:
+            data_size_register_value = DMA_DATA_SIZE_WORD;
+            break;
+    }
+
+    return data_size_register_value;
+}
+
+static void configure_fifo(Dma_t * const dma)
+{
+    // 8. FIFO usage    -   fixed for now
+    // fifos off - direct stream
+    (dma->dma_stream)->FCR &= ~DMA_SxFCR_DMDIS;
+}
+
+
+static void configure_data_flow(Dma_t * const dma)
 {
     // 4. total number of data - DMA_SxNDTR
-    DMA1_Stream3->NDTR &= ~DMA_SxNDT;
-    DMA1_Stream3->NDTR |= (DMA_DATA_LEN << DMA_SxNDT_Pos);
+    (dma->dma_stream)->NDTR &= ~DMA_SxNDT;
+    (dma->dma_stream)->NDTR |= (dma->dma_data_length << DMA_SxNDT_Pos);
+
+    configure_fifo(dma);
 
     // 9. Configure peripheral and memory incremented/fixed mode,
 
     //peripheral data width, do not increment
-    DMA1_Stream3->CR &= ~DMA_SxCR_PSIZE;
-    DMA1_Stream3->CR |= (DMA_PERIPH_DATA_WIDTH_16_BIT << DMA_SxCR_PSIZE_Pos);
-    DMA1_Stream3->CR &= ~DMA_SxCR_PINC;
+    uint32_t peripheral_data_size = get_data_size_reg_value(dma->peripheral_data_size);
+    (dma->dma_stream)->CR &= ~DMA_SxCR_PSIZE;
+    (dma->dma_stream)->CR |= (peripheral_data_size << DMA_SxCR_PSIZE_Pos);
+    (dma->dma_stream)->CR &= ~DMA_SxCR_PINC;        //incrementing fixed, needs to be parametrized
 
     //memory data width, increment memory pointer
-    DMA1_Stream3->CR &= ~DMA_SxCR_MSIZE;
-    DMA1_Stream3->CR |= (DMA_MEM_DATA_WIDTH_16_BIT << DMA_SxCR_MSIZE_Pos);
-    DMA1_Stream3->CR |= DMA_SxCR_MINC;
+    uint32_t memory_data_size = get_data_size_reg_value(dma->memory_data_size);
+    (dma->dma_stream)->CR &= ~DMA_SxCR_MSIZE;
+    (dma->dma_stream)->CR |= (memory_data_size << DMA_SxCR_MSIZE_Pos);
+    (dma->dma_stream)->CR |= DMA_SxCR_MINC;
 
-    // Circular mode on
-    DMA1_Stream3->CR |= DMA_SxCR_CIRC;
 
-    // Double buffer moder off
-    DMA1_Stream3->CR &= ~DMA_SxCR_DBM;
+    // Circular mode on             - fixed for now
+    (dma->dma_stream)->CR |= DMA_SxCR_CIRC;
 
-    //  single or burst transactions,
-    DMA1_Stream3->CR &= ~DMA_SxCR_MBURST;
-    DMA1_Stream3->CR |= (DMA_SINGLE_TRANSFER << DMA_SxCR_MBURST_Pos);
-    DMA1_Stream3->CR &= ~DMA_SxCR_PBURST;
-    DMA1_Stream3->CR |= (DMA_SINGLE_TRANSFER << DMA_SxCR_PBURST_Pos);
+    // Double buffer moder off      - fixed for now
+    (dma->dma_stream)->CR &= ~DMA_SxCR_DBM;
+
+    //  single or burst transactions,   - fixed for now
+    (dma->dma_stream)->CR &= ~DMA_SxCR_MBURST;
+    (dma->dma_stream)->CR |= (DMA_SINGLE_TRANSFER << DMA_SxCR_MBURST_Pos);
+    (dma->dma_stream)->CR &= ~DMA_SxCR_PBURST;
+    (dma->dma_stream)->CR |= (DMA_SINGLE_TRANSFER << DMA_SxCR_PBURST_Pos);
+
+    // 6. DMA is the flow controller    - fixed for now
+    (dma->dma_stream)->CR &= ~DMA_SxCR_PFCTRL;
 }
 
-static void configure_transfer_path(uint64_t *data_ptr)
+
+static void configure_transfer_path(uint64_t *data_ptr, Dma_t * const dma)
 {
+    // data transfer direction
+    dma->dma_stream->CR &= ~DMA_SxCR_DIR;
+    switch (dma->dma_direction)
+    {
+    case PERIPHERAL_TO_MEMORY:
+        dma->dma_stream->CR |= (DMA_DIR_PERIPH_TO_MEM << DMA_SxCR_DIR_Pos);
+        break;
+    default:
+        break;
+    }
+
     // 2. set peripheral address - DMA_SxPAR
-    DMA1_Stream3->PAR = (uint32_t) &(SPI2->DR);
+    dma->dma_stream->PAR = (uint32_t) dma->peripheral_address;
 
     // 3. memory address DMA_SxMA0R
-    DMA1_Stream3->M0AR = (uint32_t) data_ptr;
+    dma->dma_stream->M0AR = (uint32_t) dma->memory_address;
 
     // 5. set DMA channel - CHSEL in DMA_SxCR
-    DMA1_Stream3->CR &= ~DMA_SxCR_CHSEL;
-    DMA1_Stream3->CR |= (DMA_CHANNEL_SPI2_RX << DMA_SxCR_CHSEL_Pos);
-
-    // data transfer direction
-    DMA1_Stream3->CR &= ~DMA_SxCR_DIR;
-    DMA1_Stream3->CR |= (DMA_DIR_PERIPH_TO_MEM << DMA_SxCR_DIR_Pos);
-
+    dma->dma_stream->CR &= ~DMA_SxCR_CHSEL;
+    dma->dma_stream->CR |= (dma->dma_channel << DMA_SxCR_CHSEL_Pos);
 }
 
-static void configure_interrupt()
+// static void configure_interrupt()
+// {
+//     DMA1->LIFCR |= LISR_CLR_MASK;
+//     while(DMA1->LISR & LISR_ANY_IRQ_FLAG){};
+//     // interrupts after half and/or full transfer, and/or errors in the DMA_SxCR register
+//     // direct mode interrupt
+//     DMA1_Stream3->CR |= DMA_SxCR_DMEIE;
+//     DMA1_Stream3->CR |= DMA_SxCR_TEIE;
+//     // DMA1_Stream3->CR |= DMA_SxCR_HTIE;
+//     DMA1_Stream3->CR |= DMA_SxCR_TCIE;
+
+//     NVIC_EnableIRQ(DMA1_Stream3_IRQn);
+// }
+
+static void configure_interrupt(Dma_t * const dma)
 {
-    DMA1->LIFCR |= LISR_CLR_MASK;
-    while(DMA1->LISR & LISR_ANY_IRQ_FLAG){};
+    if((dma->dma_main_register) == DMA_1)
+    {
+        DMA1->LIFCR |= LISR_CLR_MASK;
+        while(DMA1->LISR & LISR_ANY_IRQ_FLAG){};
+    }
+    else if((dma->dma_main_register) == DMA_2)
+    {
+        DMA2->LIFCR |= LISR_CLR_MASK;
+        while(DMA2->LISR & LISR_ANY_IRQ_FLAG){};
+    }
+
     // interrupts after half and/or full transfer, and/or errors in the DMA_SxCR register
     // direct mode interrupt
-    DMA1_Stream3->CR |= DMA_SxCR_DMEIE;
-    DMA1_Stream3->CR |= DMA_SxCR_TEIE;
+    (dma->dma_stream)->CR |= DMA_SxCR_DMEIE;
+    (dma->dma_stream)->CR |= DMA_SxCR_TEIE;
     // DMA1_Stream3->CR |= DMA_SxCR_HTIE;
-    DMA1_Stream3->CR |= DMA_SxCR_TCIE;
+    (dma->dma_stream)->CR |= DMA_SxCR_TCIE;
 
-    NVIC_EnableIRQ(DMA1_Stream3_IRQn);
+    NVIC_EnableIRQ(dma->dma_irq);
 }
 
-static void set_dma_status(DmaStatus_t status)
+
+static void set_dma_status(DMA_Stream_TypeDef * const dma_stream, DmaStatus_t status)
 {
     if(status == DMA_ENABLED)
     {
-        DMA1_Stream3->CR |= DMA_SxCR_EN;
-        while (!(DMA1_Stream3->CR & DMA_SxCR_EN)) {}
+        dma_stream->CR |= DMA_SxCR_EN;
+        while (!(dma_stream->CR & DMA_SxCR_EN)) {}
     } else if (status == DMA_DISABLED)
     {
-        DMA1_Stream3->CR &= ~DMA_SxCR_EN;
-        while (DMA1_Stream3->CR & DMA_SxCR_EN) {}
+        dma_stream->CR &= ~DMA_SxCR_EN;
+        while (dma_stream->CR & DMA_SxCR_EN) {}
     }
 }
 
-static void dma_clock_init()
+static void dma_clock_init(DmaNumber_t const dma_main_register)
 {
-    RCC->AHB1ENR |= RCC_AHB1ENR_DMA1EN;
+    if(dma_main_register == DMA_1)
+    {
+        RCC->AHB1ENR |= RCC_AHB1ENR_DMA1EN;
+    }
+    else if(dma_main_register == DMA_2)
+    {
+        RCC->AHB1ENR |= RCC_AHB1ENR_DMA2EN;
+    }
 }
 
 static inline void toggle_debug_pin()
@@ -148,5 +243,21 @@ void DMA1_Stream3_IRQHandler()
     // interrupt_cnt++;
     DMA1->LIFCR |= LISR_CLR_MASK;
     while(DMA1->LISR & LISR_ANY_IRQ_FLAG){};
+    toggle_debug_pin();
+}
+
+void DMA2_Stream0_IRQHandler()
+{
+    toggle_debug_pin();
+    *buffer_ready_flag = BUFFER_READY;
+    if(DMA1->LISR & DMA_LISR_FEIF0){DMA_LISR_FEIF3_ctr++;}
+    if(DMA1->LISR & DMA_LISR_DMEIF0){DMA_LISR_DMEIF3_ctr++;}
+    if(DMA1->LISR & DMA_LISR_TEIF0){DMA_LISR_TEIF3_ctr++;}
+    if(DMA1->LISR & DMA_LISR_HTIF0){DMA_LISR_HTIF3_ctr++;}
+    if(DMA1->LISR & DMA_LISR_TCIF0){DMA_LISR_TCIF3_ctr++;}
+    interrupt_cnt++;
+    DMA2->LIFCR |= LISR_CLR_MASK0;
+    while(DMA2->LISR & LISR_ANY_IRQ_FLAG0){};
+    DMA2_Stream0->CR &= ~DMA_SxCR_EN;
     toggle_debug_pin();
 }

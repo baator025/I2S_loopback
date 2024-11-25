@@ -25,7 +25,7 @@ static void i2s_configure_clock(const I2sInterface_t * const i2s_interface);
 void start_i2s(const I2sInterface_t * const i2s_interface);
 
 static volatile uint16_t data;
-static volatile uint32_t reg_status;
+static volatile uint32_t reg_status[3];
 static volatile uint32_t log_ctr = 0;
 
 /*
@@ -111,6 +111,9 @@ static void i2s_configure_parameters(const I2sInterface_t * const i2s_interface)
     spi_reg->I2SCFGR &= ~SPI_I2SCFGR_DATLEN;
     spi_reg->I2SCFGR |= (I2S_16_BIT_DATA_LEN << SPI_I2SCFGR_DATLEN_Pos);
 
+    // 16 bit channel width
+    spi_reg->I2SCFGR &= ~SPI_I2SCFGR_CHLEN;
+
     // set i2s bus configuration
     switch (i2s_interface->i2s_mode)
     {
@@ -191,7 +194,11 @@ void i2s_transmit(uint16_t data, const I2sInterface_t* const i2s_interface)
 {
     SPI_TypeDef* const spi_reg = i2s_configurations[i2s_interface->i2s_config_id].i2s_configuration.spi_register;
     spi_reg->DR |= data;
-    while(!(spi_reg->SR & SPI_SR_TXE)){};
+    // while(!(spi_reg->SR & SPI_SR_TXE)){
+    //     reg_status[0] = ((spi_reg->CR2) & SPI_SR_FRE);
+    //     reg_status[1] = ((spi_reg->CR2) & SPI_SR_OVR);
+    //     reg_status[2] = ((spi_reg->CR2) & SPI_SR_UDR);
+    // };
 }
 
 void SPI2_IRQHandler()
