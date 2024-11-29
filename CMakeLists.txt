@@ -108,7 +108,7 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     $<$<CONFIG:Release>: >
 )
 
-# Add linked libraries
+# Add linked librariesMiddlewares/ST/STM32_Audio/Addons/PDM/Lib/libPDMFilter_CM4_GCC_wc32_soft.a
 target_link_libraries(${CMAKE_PROJECT_NAME} ${link_LIBS}
                         "${PROJECT_SOURCE_DIR}/Middlewares/ST/STM32_Audio/Addons/PDM/Lib/libPDMFilter_CM4_GCC_wc32.a")
 
