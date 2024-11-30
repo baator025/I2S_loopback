@@ -74,6 +74,16 @@ link_directories(${CMAKE_PROJECT_NAME} ${link_DIRS})
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
 
+set(FreeRTOS_sources
+                "Middlewares/Third_Party/FreeRTOS/Source/tasks.c"
+                "Middlewares/Third_Party/FreeRTOS/Source/queue.c"
+                "Middlewares/Third_Party/FreeRTOS/Source/timers.c"
+                "Middlewares/Third_Party/FreeRTOS/Source/list.c"
+                "Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F/port.c"
+                "Middlewares/Third_Party/FreeRTOS/Source/portable/MemMang/heap_1.c"
+                "Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.c"
+                )
+
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PUBLIC ${sources_SRCS}
                 "Src/i2s.c"
@@ -82,7 +92,14 @@ target_sources(${CMAKE_PROJECT_NAME} PUBLIC ${sources_SRCS}
                 "Src/dma.c"
                 "Src/dbg_pin.c"
                 "Src/dma_queue.c"
-                "Src/i2s_definitions.c")
+                "Src/i2s_definitions.c"
+                ${FreeRTOS_sources})
+
+set(FreeRTOS_includes
+    "${PROJECT_SOURCE_DIR}/Middlewares/Third_Party/FreeRTOS/Source/include"
+    "${PROJECT_SOURCE_DIR}/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F/"
+    "Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/"
+    )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
@@ -94,6 +111,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     "${PROJECT_SOURCE_DIR}/chip_headers/CMSIS/Device/ST/STM32F4xx/Include"
     "${PROJECT_SOURCE_DIR}/chip_headers/CMSIS/DSP/Include"
     "${PROJECT_SOURCE_DIR}/Middlewares/ST/STM32_Audio/Addons/PDM/Inc"
+    ${FreeRTOS_includes}
 )
 
 # Add project symbols (macros)

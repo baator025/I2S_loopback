@@ -28,7 +28,9 @@
 #include "dma.h"
 #include "dbg_pin.h"
 
-#include "pdm2pcm_glo.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include "timers.h"
 
 #define LOG_BUFFER_LENGTH 10
 
@@ -37,16 +39,42 @@ static uint16_t PCM_out;
 static volatile BufferStatus_t buffer_readiness_flag;
 
 static uint32_t reg_status[2];
-
-// void initialize_pdm_filter(PDM_Filter_Handler_t *pdm_handle);
-void initialize_pdm_filter(PDM_Filter_Handler_t * const pdm_handle, PDM_Filter_Config_t * const pdm_config);
-void log_signal(char* signal_name, uint8_t signal_name_len, uint16_t signal_value);
+void log_signal(const char* signal_name, uint8_t signal_name_len, uint16_t signal_value);
 void serialize_uint64(uint64_t input, uint8_t *output);
 void enable_crc();
 
 static uint32_t op_status;
 
+void init_task(void *params);
+void work_task(void *params);
+
 int main(void)
+{
+    xTaskCreate(init_task,
+                "initialization task",
+                100,
+                NULL,
+                (configMAX_PRIORITIES-2),
+                NULL
+                );
+
+    xTaskCreate(work_task,
+                "work task",
+                100,
+                NULL,
+                (tskIDLE_PRIORITY+1),
+                NULL);
+
+    vTaskStartScheduler();
+    /* Loop forever */
+    int a = 0;
+	for(;;)
+    {
+        a+=1;
+    }
+}
+
+void init_task(void *params)
 {
     discovery_clock_100mhz_config();
     uart2_tx_init();
@@ -117,28 +145,19 @@ int main(void)
     // i2s_transmit(0xBEEF, &i2s_tx_if);
     // i2s_transmit(0xDEAD, &i2s_tx_if);
     // i2s_transmit(0xBEEF, &i2s_tx_if);
+    vTaskDelete(NULL);
+}
 
-    PDM_Filter_Handler_t filter_handle;
-    PDM_Filter_Config_t pdm_config;
-    initialize_pdm_filter(&filter_handle, &pdm_config);
-    uint8_t filter_data[8];
-
-    char signal_name[4] = "sig";
-    /* Loop forever */
-	for(;;)
+void work_task(void *params)
+{
+    while(1)
     {
+        const char signal_name[4] = "sig";
         if(buffer_readiness_flag == BUFFER_READY)
         {
             buffer_readiness_flag = BUFFER_NOT_READY;
-            serialize_uint64(dma_global_buffer, filter_data);
-            op_status = PDM_Filter((uint8_t*) filter_data, (uint16_t*) &PCM_out, &filter_handle);
-            if(PCM_out > 0)
-            {
-                while(1){};
-            }
             log_signal(signal_name, sizeof(signal_name), PCM_out);
         }
-        // for(int i = 0; i < 1000000; i++){}
     }
 }
 
@@ -148,7 +167,7 @@ void put_to_uart_buff(char byte)
     USART2->DR = (byte);
 }
 
-void log_signal(char* signal_name, uint8_t signal_name_len, uint16_t signal_value)
+void log_signal(const char* signal_name, uint8_t signal_name_len, uint16_t signal_value)
 {
     char buffer[LOG_BUFFER_LENGTH];
     itoa(signal_value, buffer, 16);
@@ -164,25 +183,6 @@ void log_signal(char* signal_name, uint8_t signal_name_len, uint16_t signal_valu
     }
     put_to_uart_buff('\r');
     put_to_uart_buff('\n');
-}
-
-void initialize_pdm_filter(PDM_Filter_Handler_t * const pdm_handle, PDM_Filter_Config_t * const pdm_config)
-{
-    enable_crc();
-
-    pdm_handle->bit_order = PDM_FILTER_BIT_ORDER_LSB;
-    pdm_handle->endianness = PDM_FILTER_ENDIANNESS_LE;
-    pdm_handle->high_pass_tap =  2136746230;
-    pdm_handle->in_ptr_channels = 1;
-    pdm_handle->out_ptr_channels = 1;
-    op_status = PDM_Filter_Init(pdm_handle);
-
-    pdm_config->decimation_factor = PDM_FILTER_DEC_FACTOR_64;
-    pdm_config->output_samples_number = 1;
-    pdm_config->mic_gain = 10;
-    op_status = PDM_Filter_setConfig(pdm_handle, pdm_config);
-
-    while(1){};
 }
 
 void serialize_uint64(uint64_t input, uint8_t *output)
