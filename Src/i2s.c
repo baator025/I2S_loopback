@@ -24,9 +24,13 @@ static void i2s_configure_parameters(const I2sInterface_t * const i2s_interface)
 static void i2s_configure_clock(const I2sInterface_t * const i2s_interface);
 void start_i2s(const I2sInterface_t * const i2s_interface);
 
-static volatile uint16_t data;
+
 static volatile uint32_t reg_status[3];
 static volatile uint32_t log_ctr = 0;
+
+static volatile uint16_t data[4];
+static volatile uint8_t data_counter;
+static volatile uint8_t data_ready = 0;
 
 /*
  * functions definition section
@@ -39,17 +43,19 @@ void i2s_init(const I2sInterface_t* const i2s_interface)
     i2s_configure_interrupts(i2s_interface);
     i2s_configure_clock(i2s_interface);
     i2s_configure_parameters(i2s_interface);
-    start_i2s(i2s_interface);
+    // start_i2s(i2s_interface);
 }
 
 static void i2s_configure_gpios(const I2sInterface_t * const i2s_interface)
 {
     const GpioI2sConfig_t * clk_pin = &(i2s_configurations[i2s_interface->i2s_config_id].clk_pin);
     const GpioI2sConfig_t * data_pin = &(i2s_configurations[i2s_interface->i2s_config_id].data_pin);
+    const GpioI2sConfig_t * ws_pin = &(i2s_configurations[i2s_interface->i2s_config_id].ws_pin);
 
     // enable clock for gpio_banks:
     RCC->AHB1ENR |= clk_pin->rcc_pin_bank_position;
     RCC->AHB1ENR |= data_pin->rcc_pin_bank_position;
+    RCC->AHB1ENR |= ws_pin->rcc_pin_bank_position;
 
     // set gpios to alternate functions:
     (clk_pin->pin_bank)->MODER &= ~(GPIO_MODE_BASE_MASK << clk_pin->pin_mode_position);
@@ -58,12 +64,18 @@ static void i2s_configure_gpios(const I2sInterface_t * const i2s_interface)
     (data_pin->pin_bank)->MODER &= ~(GPIO_MODE_BASE_MASK << data_pin->pin_mode_position);
     (data_pin->pin_bank)->MODER |= (GPIO_ALTERNATE_FUN << data_pin->pin_mode_position);
 
+    (ws_pin->pin_bank)->MODER &= ~(GPIO_MODE_BASE_MASK << ws_pin->pin_mode_position);
+    (ws_pin->pin_bank)->MODER |= (GPIO_ALTERNATE_FUN << ws_pin->pin_mode_position);
+
     // specify alternate functions:
     (clk_pin->pin_bank)->AFR[clk_pin->afr_register_index] &= ~(GPIO_AFR_BASE_MASK << clk_pin->afr_pin_position);
     (clk_pin->pin_bank)->AFR[clk_pin->afr_register_index] |= (clk_pin->afr_value << clk_pin->afr_pin_position);
 
     (data_pin->pin_bank)->AFR[data_pin->afr_register_index] &= ~(GPIO_AFR_BASE_MASK << data_pin->afr_pin_position);
     (data_pin->pin_bank)->AFR[data_pin->afr_register_index] |= (data_pin->afr_value << data_pin->afr_pin_position);
+
+    (ws_pin->pin_bank)->AFR[ws_pin->afr_register_index] &= ~(GPIO_AFR_BASE_MASK << ws_pin->afr_pin_position);
+    (ws_pin->pin_bank)->AFR[ws_pin->afr_register_index] |= (ws_pin->afr_value << ws_pin->afr_pin_position);
 }
 
 static void i2s_configure_plls(const I2sPllConfig_t * const pll_config)
@@ -133,8 +145,15 @@ static void i2s_configure_parameters(const I2sInterface_t * const i2s_interface)
         break;
     }
 
-    // set DMA on, needs to be parametrized later
-    spi_reg->CR2 |= SPI_CR2_RXDMAEN;
+    // set DMA on or off
+    if(i2s_interface->dma_status == I2S_DMA_ON)
+    {
+        spi_reg->CR2 |= SPI_CR2_RXDMAEN;
+    }
+    else
+    {
+        spi_reg->CR2 &= ~SPI_CR2_RXDMAEN;
+    }
 
 }
 
@@ -146,6 +165,9 @@ static void i2s_configure_interrupts(const I2sInterface_t * const i2s_interface)
     if(i2s_interface->receive_interrupt_flag == INTERRUPTS_USED)
     {
         spi_reg->CR2 |= SPI_CR2_RXNEIE;
+        spi_reg->CR2 |= SPI_CR2_ERRIE;
+        spi_reg->CR2 |= SPI_CR2_TXEIE;
+        NVIC_SetPriority(irq_id, 0);
         NVIC_EnableIRQ(irq_id);
     }
     else if(i2s_interface->receive_interrupt_flag == INTERRUPTS_NOT_USED)
@@ -189,11 +211,22 @@ void start_i2s(const I2sInterface_t * const i2s_interface)
     spi_reg->I2SCFGR |= SPI_I2SCFGR_I2SE;
 }
 
+I2sTxReadinessState_t i2s_is_tx_ready(const I2sInterface_t* const i2s_interface)
+{
+    I2sTxReadinessState_t return_value = I2S_TX_NOT_READY;
+    SPI_TypeDef* const spi_reg = i2s_configurations[i2s_interface->i2s_config_id].i2s_configuration.spi_register;
+    if((spi_reg->SR & SPI_SR_TXE) == SPI_SR_TXE)
+    {
+        return_value = I2S_TX_READY;
+    }
+    return return_value;
+}
+
 
 void i2s_transmit(uint16_t data, const I2sInterface_t* const i2s_interface)
 {
     SPI_TypeDef* const spi_reg = i2s_configurations[i2s_interface->i2s_config_id].i2s_configuration.spi_register;
-    spi_reg->DR |= data;
+    spi_reg->DR = data;
     // while(!(spi_reg->SR & SPI_SR_TXE)){
     //     reg_status[0] = ((spi_reg->CR2) & SPI_SR_FRE);
     //     reg_status[1] = ((spi_reg->CR2) & SPI_SR_OVR);
@@ -203,4 +236,34 @@ void i2s_transmit(uint16_t data, const I2sInterface_t* const i2s_interface)
 
 void SPI2_IRQHandler()
 {
+    data_counter++;
+}
+
+
+void SPI4_IRQHandler()
+{
+    if(data_counter < 4)
+    {
+        data[data_counter] = SPI4->DR;
+        data_counter++;
+    }
+    else
+    {
+        data_ready = 1;
+        SPI4->I2SCFGR &= ~SPI_I2SCFGR_I2SE;
+        SPI3->I2SCFGR &= ~SPI_I2SCFGR_I2SE;
+    }
+}
+
+void get_readouts(uint16_t* data_ptr)
+{
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        data_ptr[i] = data[i];
+    }
+}
+
+uint8_t is_data_ready()
+{
+    return(data_ready);
 }

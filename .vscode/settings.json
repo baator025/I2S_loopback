@@ -8,6 +8,16 @@
         "pdm2pcm_glo.h": "c",
         "clock.h": "c",
         "stm32f4xx.h": "c",
-        "freertos.h": "c"
+        "freertos.h": "c",
+        "array": "c",
+        "*.tcc": "c",
+        "string": "c",
+        "vector": "c",
+        "string_view": "c",
+        "functional": "c",
+        "limits": "c",
+        "ostream": "c",
+        "streambuf": "c",
+        "tuple": "c"
     }
 }

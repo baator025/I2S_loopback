@@ -49,6 +49,18 @@ typedef enum
     SLAVE_TRANSMITTER
 } I2sMode_t;
 
+typedef enum
+{
+    I2S_TX_NOT_READY,
+    I2S_TX_READY
+} I2sTxReadinessState_t;
+
+typedef enum
+{
+  I2S_DMA_ON,
+  I2S_DMA_OFF
+} I2sDmaStatus_t;
+
 /**
  * Struct section
  */
@@ -74,6 +86,7 @@ typedef struct
     I2sPllConfig_t pll_config;
     PrescalerConfig_t prescaler_config;
     I2sMode_t i2s_mode;
+    I2sDmaStatus_t dma_status;
 }   I2sInterface_t;
 
 /**
@@ -82,6 +95,11 @@ typedef struct
 
 void i2s_init(const I2sInterface_t* const i2s_interface);
 void i2s_transmit(uint16_t data, const I2sInterface_t* const i2s_interface);
+I2sTxReadinessState_t i2s_is_tx_ready(const I2sInterface_t* const i2s_interface);
+void start_i2s(const I2sInterface_t * const i2s_interface);
+
+void get_readouts(uint16_t* data_ptr);
+uint8_t is_data_ready();
 
 
 #endif //__I2S_H__

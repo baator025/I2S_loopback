@@ -35,6 +35,7 @@ typedef struct
 {
     GpioI2sConfig_t clk_pin;
     GpioI2sConfig_t data_pin;
+    GpioI2sConfig_t ws_pin;
     I2sPeripheralConfig_t i2s_configuration;
 } I2sConfig;
 

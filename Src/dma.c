@@ -171,7 +171,7 @@ static void configure_transfer_path(uint64_t *data_ptr, Dma_t * const dma)
 //     // direct mode interrupt
 //     DMA1_Stream3->CR |= DMA_SxCR_DMEIE;
 //     DMA1_Stream3->CR |= DMA_SxCR_TEIE;
-//     // DMA1_Stream3->CR |= DMA_SxCR_HTIE;
+    // DMA1_Stream3->CR |= DMA_SxCR_HTIE;
 //     DMA1_Stream3->CR |= DMA_SxCR_TCIE;
 
 //     NVIC_EnableIRQ(DMA1_Stream3_IRQn);
@@ -194,7 +194,7 @@ static void configure_interrupt(Dma_t * const dma)
     // direct mode interrupt
     (dma->dma_stream)->CR |= DMA_SxCR_DMEIE;
     (dma->dma_stream)->CR |= DMA_SxCR_TEIE;
-    // DMA1_Stream3->CR |= DMA_SxCR_HTIE;
+    // (dma->dma_stream)->CR |= DMA_SxCR_HTIE;
     (dma->dma_stream)->CR |= DMA_SxCR_TCIE;
 
     NVIC_EnableIRQ(dma->dma_irq);
@@ -248,16 +248,20 @@ void DMA1_Stream3_IRQHandler()
 
 void DMA2_Stream0_IRQHandler()
 {
+    SPI4->I2SCFGR &= ~SPI_I2SCFGR_I2SE;
+    SPI3->I2SCFGR &= ~SPI_I2SCFGR_I2SE;
     toggle_debug_pin();
     *buffer_ready_flag = BUFFER_READY;
-    if(DMA1->LISR & DMA_LISR_FEIF0){DMA_LISR_FEIF3_ctr++;}
-    if(DMA1->LISR & DMA_LISR_DMEIF0){DMA_LISR_DMEIF3_ctr++;}
-    if(DMA1->LISR & DMA_LISR_TEIF0){DMA_LISR_TEIF3_ctr++;}
-    if(DMA1->LISR & DMA_LISR_HTIF0){DMA_LISR_HTIF3_ctr++;}
-    if(DMA1->LISR & DMA_LISR_TCIF0){DMA_LISR_TCIF3_ctr++;}
+    if(DMA2->LISR & DMA_LISR_FEIF0){DMA_LISR_FEIF3_ctr++;}
+    if(DMA2->LISR & DMA_LISR_DMEIF0){DMA_LISR_DMEIF3_ctr++;}
+    if(DMA2->LISR & DMA_LISR_TEIF0){DMA_LISR_TEIF3_ctr++;}
+    if(DMA2->LISR & DMA_LISR_HTIF0){DMA_LISR_HTIF3_ctr++;}
+    if(DMA2->LISR & DMA_LISR_TCIF0){DMA_LISR_TCIF3_ctr++;}
     interrupt_cnt++;
     DMA2->LIFCR |= LISR_CLR_MASK0;
     while(DMA2->LISR & LISR_ANY_IRQ_FLAG0){};
     DMA2_Stream0->CR &= ~DMA_SxCR_EN;
+
+
     toggle_debug_pin();
 }
