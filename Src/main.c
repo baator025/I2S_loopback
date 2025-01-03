@@ -35,12 +35,14 @@
 
 #define LOG_BUFFER_LENGTH 10
 
-static uint64_t dma_global_buffer = 0;
+// static uint64_t dma_global_buffer = 0;
+static uint16_t dma_global_buffer[16];
 static uint16_t PCM_out;
 static volatile BufferStatus_t buffer_readiness_flag;
-static uint16_t reg_stat;
 
-static uint16_t readouts[4];
+// static uint16_t readouts[4];
+
+#define MAX_DATA_CTR (4)
 
 SemaphoreHandle_t initialization_semaphore;
 
@@ -57,6 +59,7 @@ typedef struct
     I2sInterface_t * i2s_rx_if;
     I2sInterface_t * i2s_tx_if;
     Dma_t * rx_dma;
+    I2sPllConfig_t * pll_config;
 } I2sInterfacePacked_t;
 
 
@@ -65,34 +68,32 @@ int main(void)
     discovery_clock_100mhz_config();
     initialization_semaphore = xSemaphoreCreateBinary();
     xSemaphoreGive(initialization_semaphore);
-    static I2sInterface_t i2s_rx_if = {.i2s_config_id=I2S4_CONF,        //WS PE11
+    static I2sInterface_t i2s_rx_if = {.i2s_config_id=I2S4_CONF,
                                         .receive_interrupt_flag=INTERRUPTS_NOT_USED,
-                                        .clock_polarity = RISING_EDGE,
+                                        .clock_polarity = FALLING_EDGE,
                                         .prescaler_config = {.clock_divider_value = 32,
                                                             .prescaler_odd_bit = NOT_ODD},
-                                        .pll_config = {.pll_m_value = 16,
-                                                        .pll_n_value = 201,
-                                                        .pll_r_value = 6},
+                                        .gpio_ospeedr = GPIO_OSPEEDR_VERY_HIGH,
                                         .i2s_mode = MASTER_RECEIVER,
                                         .dma_status = I2S_DMA_ON};
 
-    static I2sInterface_t i2s_tx_if = {.i2s_config_id=I2S3_CONF,    //WS PA15
-                                            .receive_interrupt_flag=INTERRUPTS_NOT_USED,
+    static I2sInterface_t i2s_tx_if = {.i2s_config_id=I2S3_CONF,
+                                            .receive_interrupt_flag=INTERRUPTS_USED,
                                             .clock_polarity = FALLING_EDGE,
                                             .prescaler_config = {.clock_divider_value = 32,
                                                                 .prescaler_odd_bit = NOT_ODD},
-                                            .pll_config = {.pll_m_value = 16,
-                                                            .pll_n_value = 201,
-                                                            .pll_r_value = 6},
+                                            .gpio_ospeedr = GPIO_OSPEEDR_VERY_HIGH,
                                             .i2s_mode = SLAVE_TRANSMITTER,
                                             .dma_status = I2S_DMA_OFF};
+
+    static I2sPllConfig_t pll_config = {.pll_m_value = 16, .pll_n_value = 201, .pll_r_value = 6};
 
     static Dma_t i2s_4_dma = { .dma_main_register = DMA_2,
                                 .dma_stream = DMA2_Stream0,
                                 .dma_direction = PERIPHERAL_TO_MEMORY,
                                 .dma_irq = DMA2_Stream0_IRQn,
                                 .dma_channel = 4,
-                                .dma_data_length = 4,
+                                .dma_data_length = 16,
                                 .memory_address = &dma_global_buffer,
                                 .memory_data_size = HALF_WORD,
                                 .peripheral_address = &(SPI4->DR),
@@ -100,7 +101,8 @@ int main(void)
 
     static I2sInterfacePacked_t i2s_interfaces_packed = {.i2s_rx_if = &i2s_rx_if,
                                                         .i2s_tx_if = &i2s_tx_if,
-                                                        .rx_dma = &i2s_4_dma};
+                                                        .rx_dma = &i2s_4_dma,
+                                                        .pll_config = &pll_config};
 
     xTaskCreate(feeder_task,
             "i2s feeder task",
@@ -139,27 +141,28 @@ void feeder_task(void *params)
 {
     xSemaphoreTake(initialization_semaphore, portMAX_DELAY);
     vTaskPrioritySet(NULL, tskIDLE_PRIORITY + 2);
-    I2sInterface_t* i2s_tx_if = (I2sInterface_t*) params;
-    uint8_t init_flag = 0;
+    taskYIELD();
+    // I2sInterface_t* i2s_tx_if = (I2sInterface_t*) params;
+    // uint8_t init_flag = 0;
 
-    // uint16_t test_data[4] = {0xDEAD, 0xBEEF, 0xC0FF, 0xEE00};
-    uint16_t test_data[4] = {0xFFFF, 0x0000, 0x0000, 0x0000};
-    uint8_t i = 0;
-    while(1)
-    {
-        I2sTxReadinessState_t tx_ready = i2s_is_tx_ready(i2s_tx_if);
-        if(tx_ready == I2S_TX_READY)
-        {
-            i2s_transmit(test_data[i], i2s_tx_if);
-            i++;
-            if(!init_flag)
-            {
+    // uint16_t test_data[4] = {0x8001, 0x0000, 0x0000, 0x0000};
+    // // uint16_t test_data[4] = {0xFFF, 0x0000, 0x0000, 0x0000};
+    // uint8_t i = 0;
+    // while(1)
+    // {
+    //     I2sTxReadinessState_t tx_ready = i2s_is_tx_ready(i2s_tx_if);
+    //     if(tx_ready == I2S_TX_READY)
+    //     {
+    //         i2s_transmit(test_data[i], i2s_tx_if);
+    //         i++;
+    //         if(!init_flag)
+    //         {
                 xSemaphoreGive(initialization_semaphore);   // only during init
-                init_flag = 1;
-            }
-        }
-        if(i == 4) break;
-    }
+    //             init_flag = 1;
+    //         }
+    //     }
+    //     if(i == 4) break;
+    // }
     vTaskDelete(NULL);
 }
 
@@ -169,16 +172,18 @@ void init_task(void *params)
     printf("uart and clock configured\r\n");
 
     I2sInterfacePacked_t *i2s_interfaces = (I2sInterfacePacked_t*) params;
+    I2sPllConfig_t *pll_config = i2s_interfaces->pll_config;
     I2sInterface_t *i2s_tx_if = i2s_interfaces->i2s_tx_if;
     I2sInterface_t *i2s_rx_if = i2s_interfaces->i2s_rx_if;
     Dma_t *rx_dma = i2s_interfaces->rx_dma;
+
+    i2s_configure_pll(pll_config);
     i2s_init(i2s_rx_if);
-    vTaskDelay(500);
     i2s_init(i2s_tx_if);
+    start_i2s(i2s_tx_if);
 
     xSemaphoreTake(initialization_semaphore, portMAX_DELAY);
-    vTaskDelay(1000);
-    start_i2s(i2s_tx_if);
+    // vTaskDelay(1000);
     dma_init(&dma_global_buffer, &buffer_readiness_flag, rx_dma);
     start_i2s(i2s_rx_if);
 

@@ -20,6 +20,7 @@ typedef struct
     uint8_t afr_register_index; // AFRx register
     uint32_t afr_pin_position;
     uint32_t afr_value; //AF5/AF6
+    uint32_t ospeedr_pin_position;
 } GpioI2sConfig_t;
 
 typedef struct

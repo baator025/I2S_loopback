@@ -6,8 +6,10 @@
 #define GPIO_ALTERNATE_FUN (0x02)
 #define GPIO_MODE_BASE_MASK (0x3U)
 #define GPIO_AFR_BASE_MASK (0x0FU)
+#define GPIO_OSPEEDR_MASK (0x03U)
 
 #define I2S_MSB_STANDARD (0x01)
+#define I2S_LSB_STANDARD (0x02)
 #define I2S_16_BIT_DATA_LEN (0x00)
 
 #define I2S_MASTER_TRANSMIT (0x02)
@@ -18,18 +20,35 @@
  * static functions section
 */
 static void i2s_configure_gpios(const I2sInterface_t * const i2s_interface);
-static void i2s_configure_plls(const I2sPllConfig_t * const pll_config);
 static void i2s_configure_interrupts(const I2sInterface_t * const i2s_interface);
 static void i2s_configure_parameters(const I2sInterface_t * const i2s_interface);
 static void i2s_configure_clock(const I2sInterface_t * const i2s_interface);
-void start_i2s(const I2sInterface_t * const i2s_interface);
 
 
-static volatile uint32_t reg_status[3];
+static volatile uint32_t rx_reg_status[4];
+static volatile uint32_t tx_reg_status[4];
 static volatile uint32_t log_ctr = 0;
 
-static volatile uint16_t data[4];
-static volatile uint8_t data_counter;
+// static volatile uint16_t data[4];
+// static volatile uint16_t data[4] = {0x0000, 0x0000, 0xFFFE, 0x5551};
+#define DATA_SIZE (16)
+// static volatile uint16_t data[16] = {0x1000, 0x2000, 0x3000, 0x4000,
+//                                         0x5000, 0x6000, 0x7000, 0x8000,
+//                                         0x9000, 0xA000, 0xB000, 0xC000,
+//                                         0xD000, 0xE000, 0xF000, 0x0000};
+// static volatile uint16_t data[16] = {0x0000, 0x0001, 0x0002, 0x0003,
+//                                         0x0004, 0x0005, 0x0006, 0x0007,
+//                                         0x0008, 0x0009, 0x000A, 0x000B,
+//                                         0x000C, 0x000D, 0x000E, 0x000F};
+// static volatile uint16_t data[16] = {0x0000, 0x0000, 0xFFFE, 0x5551,
+//                                         0xFFFE, 0x5551, 0x7000, 0x8000,
+//                                         0xFFFE, 0x5551, 0xFFFE, 0x5551,
+//                                         0xFFFE, 0x5551, 0xFFFE, 0x5551};
+static volatile uint16_t data[16] = {0x5551, 0xFFFE, 0x5551, 0xFFFE,
+                                        0x5551, 0xFFFE, 0x5551, 0xFFFE,
+                                        0x5551, 0xFFFE, 0x5551, 0xFFFE,
+                                        0x5551, 0xFFFE, 0x5551, 0xFFFE};
+static volatile uint8_t data_counter = 0;
 static volatile uint8_t data_ready = 0;
 
 /*
@@ -39,15 +58,16 @@ static volatile uint8_t data_ready = 0;
 void i2s_init(const I2sInterface_t* const i2s_interface)
 {
     i2s_configure_gpios(i2s_interface);
-    i2s_configure_plls(&(i2s_interface->pll_config));
-    i2s_configure_interrupts(i2s_interface);
     i2s_configure_clock(i2s_interface);
+    i2s_configure_interrupts(i2s_interface);
     i2s_configure_parameters(i2s_interface);
     // start_i2s(i2s_interface);
 }
 
 static void i2s_configure_gpios(const I2sInterface_t * const i2s_interface)
 {
+    /* those pointers may be later placed in an array and all configuration
+        may be done in one loop*/
     const GpioI2sConfig_t * clk_pin = &(i2s_configurations[i2s_interface->i2s_config_id].clk_pin);
     const GpioI2sConfig_t * data_pin = &(i2s_configurations[i2s_interface->i2s_config_id].data_pin);
     const GpioI2sConfig_t * ws_pin = &(i2s_configurations[i2s_interface->i2s_config_id].ws_pin);
@@ -76,9 +96,19 @@ static void i2s_configure_gpios(const I2sInterface_t * const i2s_interface)
 
     (ws_pin->pin_bank)->AFR[ws_pin->afr_register_index] &= ~(GPIO_AFR_BASE_MASK << ws_pin->afr_pin_position);
     (ws_pin->pin_bank)->AFR[ws_pin->afr_register_index] |= (ws_pin->afr_value << ws_pin->afr_pin_position);
+
+    //ospeedr config
+    (clk_pin->pin_bank)->OSPEEDR &= ~(GPIO_OSPEEDR_MASK << clk_pin->ospeedr_pin_position);
+    (clk_pin->pin_bank)->OSPEEDR |= (i2s_interface->gpio_ospeedr << clk_pin->ospeedr_pin_position);
+
+    (data_pin->pin_bank)->OSPEEDR &= ~(GPIO_OSPEEDR_MASK << data_pin->ospeedr_pin_position);
+    (data_pin->pin_bank)->OSPEEDR |= (i2s_interface->gpio_ospeedr << data_pin->ospeedr_pin_position);
+
+    (ws_pin->pin_bank)->OSPEEDR &= ~(GPIO_OSPEEDR_MASK << ws_pin->ospeedr_pin_position);
+    (ws_pin->pin_bank)->OSPEEDR |= (i2s_interface->gpio_ospeedr << ws_pin->ospeedr_pin_position);
 }
 
-static void i2s_configure_plls(const I2sPllConfig_t * const pll_config)
+void i2s_configure_pll(const I2sPllConfig_t * const pll_config)
 {
     // I2S PLL configuration (RCC_PLLI2SCFGR)
     RCC->PLLI2SCFGR &= ~RCC_PLLI2SCFGR_PLLI2SM;
@@ -161,18 +191,27 @@ static void i2s_configure_interrupts(const I2sInterface_t * const i2s_interface)
 {
     SPI_TypeDef* const spi_reg = i2s_configurations[i2s_interface->i2s_config_id].i2s_configuration.spi_register;
     const IRQn_Type irq_id = i2s_configurations[i2s_interface->i2s_config_id].i2s_configuration.irq_id;
+    const I2sMode_t i2s_mode = i2s_interface->i2s_mode;
 
     if(i2s_interface->receive_interrupt_flag == INTERRUPTS_USED)
     {
-        spi_reg->CR2 |= SPI_CR2_RXNEIE;
-        spi_reg->CR2 |= SPI_CR2_ERRIE;
-        spi_reg->CR2 |= SPI_CR2_TXEIE;
+        if(i2s_mode == MASTER_TRANSMITTER || i2s_mode == SLAVE_TRANSMITTER)
+        {
+            spi_reg->CR2 |= SPI_CR2_TXEIE;
+        }
+        else
+        {
+            spi_reg->CR2 |= SPI_CR2_RXNEIE;
+            spi_reg->CR2 |= SPI_CR2_ERRIE;
+        }
         NVIC_SetPriority(irq_id, 0);
         NVIC_EnableIRQ(irq_id);
     }
     else if(i2s_interface->receive_interrupt_flag == INTERRUPTS_NOT_USED)
     {
         spi_reg->CR2 &= ~SPI_CR2_RXNEIE;
+        spi_reg->CR2 &= ~SPI_CR2_ERRIE;
+        spi_reg->CR2 &= ~SPI_CR2_TXEIE;
         NVIC_DisableIRQ(irq_id);
     }
 
@@ -244,7 +283,29 @@ void SPI4_IRQHandler()
 {
     if(data_counter < 4)
     {
+        rx_reg_status[data_counter] = SPI4->SR;
+        tx_reg_status[data_counter] = SPI3->SR;
         data[data_counter] = SPI4->DR;
+        data_counter++;
+    }
+    else
+    {
+        data_ready = 1;
+        // SPI4->I2SCFGR &= ~SPI_I2SCFGR_I2SE;
+        // SPI3->I2SCFGR &= ~SPI_I2SCFGR_I2SE;
+    }
+}
+
+void SPI3_IRQHandler()
+{
+    // const uint64_t LIMIT = 205;
+    // for(uint64_t i  = 0; i < LIMIT; i++){}
+    if(data_counter < DATA_SIZE)
+    {
+        SPI3->DR = data[data_counter];
+        // rx_reg_status[data_counter] = SPI4->SR;
+        // tx_reg_status[data_counter] = SPI3->SR;
+        // data[data_counter] = SPI4->DR;
         data_counter++;
     }
     else

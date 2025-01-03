@@ -26,6 +26,13 @@ typedef uint8_t ClockDivider_t;
 
 typedef enum
 {
+    GPIO_OSPEEDR_LOW = 0x00U,
+    GPIO_OSPEEDR_MEDIUM = 0x01U,
+    GPIO_OSPEEDR_HIGH = 0x02U,
+    GPIO_OSPEEDR_VERY_HIGH = 0x03U
+} GpioOspeedr_t;
+typedef enum
+{
     INTERRUPTS_USED,
     INTERRUPTS_NOT_USED
 } InterruptsUsed_t;
@@ -83,8 +90,8 @@ typedef struct
     InterruptsUsed_t receive_interrupt_flag;
     RxInterruptCallback_t receive_interrupt_callback;
     ClockPolarity_t clock_polarity;
-    I2sPllConfig_t pll_config;
     PrescalerConfig_t prescaler_config;
+    GpioOspeedr_t gpio_ospeedr;
     I2sMode_t i2s_mode;
     I2sDmaStatus_t dma_status;
 }   I2sInterface_t;
@@ -93,10 +100,12 @@ typedef struct
  * Functions section
  */
 
+void i2s_configure_pll(const I2sPllConfig_t * const pll_config);
 void i2s_init(const I2sInterface_t* const i2s_interface);
 void i2s_transmit(uint16_t data, const I2sInterface_t* const i2s_interface);
-I2sTxReadinessState_t i2s_is_tx_ready(const I2sInterface_t* const i2s_interface);
 void start_i2s(const I2sInterface_t * const i2s_interface);
+
+I2sTxReadinessState_t i2s_is_tx_ready(const I2sInterface_t* const i2s_interface);
 
 void get_readouts(uint16_t* data_ptr);
 uint8_t is_data_ready();

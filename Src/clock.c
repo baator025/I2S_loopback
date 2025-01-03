@@ -7,7 +7,7 @@ uint32_t rcc_view;
  * HCLK                 = 100 MHz
  * AHB Prescaler        = 1
  * APB1 Prescaler       = 2
- * APB2 Prescaler       = 1
+ * APB2 Prescaler       = 2
  * HSE                  = 8 MHz
  */
 
@@ -83,7 +83,7 @@ void discovery_clock_100mhz_config(void)
 
     // Set APB2 Prescaler
     RCC->CFGR &= ~RCC_CFGR_PPRE2;
-    RCC->CFGR |= RCC_CFGR_PPRE2_DIV1;
+    RCC->CFGR |= RCC_CFGR_PPRE2_DIV2;
 
     // Clear PLL config
     RCC->PLLCFGR &= ~(RCC_PLLCFGR_PLLM_Msk |
